@@ -54,7 +54,7 @@ function App() {
 	  askModel();
         }}
       >
-        <input
+        <textarea
           id="ask-model-input"
           onChange={(e) => setInquiry(e.currentTarget.value)}
           placeholder="Type here to ask the model..."
