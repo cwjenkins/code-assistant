@@ -2,57 +2,53 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use ollama_rs::{
-    generation::completion::{
+    /*generation::completion::{
         request::GenerationRequest, GenerationContext, GenerationResponseStream,
+},*/
+    generation::chat::{
+	request::ChatMessageRequest, ChatMessage, ChatMessageResponse, MessageRole,
     },
     Ollama,
 };
-use tokio::io::{stdout, AsyncWriteExt};
-use tokio_stream::StreamExt;
-
+use tauri::Manager;
+use tokio::sync::mpsc;
+//use tokio::io::{stdout, AsyncWriteExt};
+//use tokio_stream::StreamExt;
 #[derive(Clone, serde::Serialize)]
 struct AskResponse {
     message: String,
 }
 
-#[derive(Clone, serde::Serialize)]
-struct ListResponse {
-    models: Vec<String>
-}
-
-static GLOBAL_APP_HANDLE: OnceCell<AppHandle> = OnceCell::new();
-
-// Learn more about Tauri commands at https://v1.tauri.app/v1/guides/features/command
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[tauri::command]
-fn list_models() -> Vec<String> {
+async fn list_models() -> Vec<String> {
     let ollama = Ollama::default();
-    
+
+    let list_model_response = ollama.list_local_models().await.unwrap();
+
+    return list_model_response.iter().map( |model| model.name.clone() ).collect();
 }
 
 #[tauri::command]
-fn ask_model(content: &str) -> String {
+async fn ask_model(model: String, inquiry: String) -> String {
+    println!("Model is: {model} and inquiry is: {inquiry}");
     let ollama = Ollama::default();
-    
+    let message = ChatMessage::new(MessageRole::User, inquiry.to_string());
+    let request = ChatMessageRequest::new(model.to_string(), vec![message]);
+    let response = ollama.send_chat_messages(request).await.unwrap();
+    println!("Response: {}", response.message.content);
+    return response.message.content;
 }
 
 fn emit_response(app: tauri::AppHandle) {
-    app.emit_all("ask-model", AskResponse { message: "" })
+    app.emit_all("ask-model", AskResponse { message: "Hello".to_owned() });
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    tauri::async_runtime::set(tokio::runtime::Handle::current());
+    
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![greet])
-        .run(|_app_handle, event| match event {
-	    tauri::RunEvent::Ready => {
-		println!("Window loaded");
-		GLOBAL_APP_HANDLE.set(_app_handle.clone()).expect("Failed to set app handle");
-	    }
-	    _ => {}
-	})
+        .invoke_handler(tauri::generate_handler![list_models, ask_model])
+        .run(tauri::generate_context!("../src-tauri/tauri.conf.json"))
         .expect("error while running tauri application");
 }
